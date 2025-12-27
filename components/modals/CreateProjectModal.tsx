@@ -4,12 +4,8 @@ import { useRouter } from 'next/navigation';
 import { AnimatePresence } from 'framer-motion';
 import { MotionDiv, MotionP } from '@/lib/motion';
 import { getModelDefinitionsForCli, getDefaultModelForCli, normalizeModelId } from '@/lib/constants/cliModels';
-import { fetchCliStatusSnapshot, createCliStatusFallback } from '@/hooks/useCLI';
-import type { CLIStatus } from '@/types/cli';
 
-import type { CreateProjectCLIOption, GlobalSettings } from '@/types/client';
-
-type CLIOption = CreateProjectCLIOption;
+import type { GlobalSettings } from '@/types/client';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
@@ -17,88 +13,13 @@ const DEFAULT_MODEL_ID = getDefaultModelForCli('claude');
 
 const sanitizeModel = (cli: string, model?: string | null) => normalizeModelId(cli, model);
 
-const CLI_OPTIONS: CLIOption[] = [
-  {
-    id: 'claude',
-    name: 'Claude Code',
-    icon: '🤖',
-    description: 'Anthropic Claude with advanced reasoning',
-    color: 'from-orange-500 to-red-600',
-    downloadUrl: 'https://github.com/anthropics/claude-code',
-    installCommand: 'npm install -g @anthropic-ai/claude-code',
-    models: getModelDefinitionsForCli('claude').map(({ id, name, description, supportsImages }) => ({
-      id,
-      name,
-      description,
-      supportsImages,
-    })),
-    features: ['Advanced reasoning', 'Code generation', '1M context window'],
-  },
-  {
-    id: 'codex',
-    name: 'Codex CLI',
-    icon: '🧠',
-    description: 'OpenAI Codex agent with GPT-5 support',
-    color: 'from-slate-900 to-gray-700',
-    downloadUrl: 'https://github.com/openai/codex',
-    installCommand: 'npm install -g @openai/codex',
-    models: getModelDefinitionsForCli('codex').map(({ id, name, description, supportsImages }) => ({
-      id,
-      name,
-      description,
-      supportsImages,
-    })),
-    features: ['Autonomous apply_patch', 'OpenAI GPT-5 access', 'Web search integration'],
-  },
-  {
-    id: 'cursor',
-    name: 'Cursor Agent',
-    icon: '🖱️',
-    description: 'Cursor CLI with multi-model routing and session resume',
-    color: 'from-slate-500 to-gray-600',
-    downloadUrl: 'https://docs.cursor.com/en/cli/overview',
-    installCommand: 'curl https://cursor.com/install -fsS | bash',
-    models: getModelDefinitionsForCli('cursor').map(({ id, name, description, supportsImages }) => ({
-      id,
-      name,
-      description,
-      supportsImages,
-    })),
-    features: ['Autonomous workflow', 'Multi-model router', 'Session resume support'],
-  },
-  {
-    id: 'qwen',
-    name: 'Qwen Coder',
-    icon: '🛠️',
-    description: 'Alibaba Qwen Code CLI with sandboxed tooling',
-    color: 'from-emerald-500 to-teal-600',
-    downloadUrl: 'https://github.com/QwenLM/qwen-code',
-    installCommand: 'npm install -g @qwen-code/qwen-code',
-    models: getModelDefinitionsForCli('qwen').map(({ id, name, description, supportsImages }) => ({
-      id,
-      name,
-      description,
-      supportsImages,
-    })),
-    features: ['Edit/write tools', 'Sandbox approval modes', 'Great for open-source workflows'],
-  },
-  {
-    id: 'glm',
-    name: 'GLM CLI',
-    icon: '🌐',
-    description: 'Zhipu GLM agent running via Claude Code runtime',
-    color: 'from-blue-500 to-indigo-600',
-    downloadUrl: 'https://docs.z.ai/devpack/tool/claude',
-    installCommand: 'zai devpack install claude',
-    models: getModelDefinitionsForCli('glm').map(({ id, name, description, supportsImages }) => ({
-      id,
-      name,
-      description,
-      supportsImages,
-    })),
-    features: ['Claude-compatible runtime', 'GLM 4.6 reasoning', 'Text-only mode'],
-  },
-];
+// Only Claude Code is supported
+const CLAUDE_MODELS = getModelDefinitionsForCli('claude').map(({ id, name, description, supportsImages }) => ({
+  id,
+  name,
+  description,
+  supportsImages,
+}));
 
 function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -118,109 +39,58 @@ interface CreateProjectModalProps {
 export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlobalSettings }: CreateProjectModalProps) {
   const [projectName, setProjectName] = useState('');
   const [prompt, setPrompt] = useState('');
-  const [selectedCLI, setSelectedCLI] = useState<string>('claude');
   const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL_ID);
-  // Fallback is removed but kept for backward compatibility
-  const [fallbackEnabled, setFallbackEnabled] = useState(false);
   const [useDefaultSettings, setUseDefaultSettings] = useState(true);
   const [loading, setLoading] = useState(false);
   const [initializationStep, setInitializationStep] = useState('');
   const [showInitialization, setShowInitialization] = useState(false);
   const [initializingProjectId, setInitializingProjectId] = useState<string | null>(null);
   const [globalSettings, setGlobalSettings] = useState<GlobalSettings | null>(null);
-  const [enabledCLIs, setEnabledCLIs] = useState<CLIOption[]>([]);
-  const [cliStatus, setCLIStatus] = useState<CLIStatus>(() => createCliStatusFallback());
   const [imageUrl, setImageUrl] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [imageError, setImageError] = useState('');
   const [showImageInput, setShowImageInput] = useState(false);
   const [showWebsiteInput, setShowWebsiteInput] = useState(false);
-  const [showCLIDropdown, setShowCLIDropdown] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const router = useRouter();
 
   const loadGlobalSettings = useCallback(async () => {
     try {
-      const [settingsResponse, cliStatuses] = await Promise.all([
-        fetch(`${API_BASE}/api/settings/global`),
-        fetchCliStatusSnapshot(),
-      ]);
-
-      setCLIStatus(cliStatuses);
+      const settingsResponse = await fetch(`${API_BASE}/api/settings/global`);
 
       let settings: GlobalSettings | null = null;
       if (settingsResponse.ok) {
         settings = await settingsResponse.json();
-        if (settings?.cli_settings) {
-          for (const [cli, config] of Object.entries(settings.cli_settings)) {
-            if (config && typeof config === 'object' && 'model' in config && config.model) {
-              config.model = sanitizeModel(cli, config.model as string);
-            }
-          }
+        if (settings?.cli_settings?.claude?.model) {
+          settings.cli_settings.claude.model = sanitizeModel('claude', settings.cli_settings.claude.model as string);
         }
         setGlobalSettings(settings);
       }
 
       if (settings) {
-        const enabled = CLI_OPTIONS.filter((cli) => {
-          const isEnabled = settings.cli_settings?.[cli.id]?.enabled !== false;
-          const isInstalled = cliStatuses[cli.id]?.installed !== false;
-          const isAvailable = cli.enabled !== false;
-          return isEnabled && isInstalled && isAvailable;
-        });
-
-        const effectiveCLIs = enabled.length > 0 ? enabled : CLI_OPTIONS.filter((cli) => cli.enabled !== false);
-        setEnabledCLIs(effectiveCLIs);
-
-        const defaultCLI = settings.default_cli || 'claude';
-        const preferredCLI =
-          effectiveCLIs.find((cli) => cli.id === defaultCLI)?.id ?? effectiveCLIs[0]?.id ?? 'claude';
-        setSelectedCLI(preferredCLI);
-        setFallbackEnabled(settings.fallback_enabled ?? true);
-
-        const preferredModelSetting = settings.cli_settings?.[preferredCLI]?.model;
+        const preferredModelSetting = settings.cli_settings?.claude?.model;
         if (preferredModelSetting) {
-          setSelectedModel(sanitizeModel(preferredCLI, preferredModelSetting as string));
+          setSelectedModel(sanitizeModel('claude', preferredModelSetting as string));
         } else {
-          const fallbackModel =
-            effectiveCLIs.find((cli) => cli.id === preferredCLI)?.models[0]?.id ?? DEFAULT_MODEL_ID;
-          setSelectedModel(sanitizeModel(preferredCLI, fallbackModel));
+          setSelectedModel(sanitizeModel('claude', CLAUDE_MODELS[0]?.id ?? DEFAULT_MODEL_ID));
         }
       } else {
-        const available = CLI_OPTIONS.filter(
-          (cli) => cliStatuses[cli.id]?.installed !== false && cli.enabled !== false
-        );
-        const effectiveCLIs = available.length > 0 ? available : CLI_OPTIONS.filter((cli) => cli.enabled !== false);
-        setEnabledCLIs(effectiveCLIs);
-
-        const fallbackCLI = effectiveCLIs[0]?.id ?? 'claude';
-        setSelectedCLI(fallbackCLI);
-        const fallbackModel = effectiveCLIs[0]?.models[0]?.id ?? DEFAULT_MODEL_ID;
-        setSelectedModel(sanitizeModel(fallbackCLI, fallbackModel));
-        setFallbackEnabled(true);
+        setSelectedModel(sanitizeModel('claude', CLAUDE_MODELS[0]?.id ?? DEFAULT_MODEL_ID));
       }
     } catch (error) {
       console.error('Failed to load global settings:', error);
-      setCLIStatus(createCliStatusFallback());
-      const available = CLI_OPTIONS.filter((cli) => cli.enabled !== false);
-      setEnabledCLIs(available);
-      const fallbackCLI = available[0]?.id ?? 'claude';
-      setSelectedCLI(fallbackCLI);
-      const fallbackModel = available[0]?.models[0]?.id ?? DEFAULT_MODEL_ID;
-      setSelectedModel(sanitizeModel(fallbackCLI, fallbackModel));
-      setFallbackEnabled(true);
+      setSelectedModel(sanitizeModel('claude', CLAUDE_MODELS[0]?.id ?? DEFAULT_MODEL_ID));
     }
   }, []);
 
-  // Load global settings and enabled CLIs when modal opens
+  // Load global settings when modal opens
   useEffect(() => {
     if (open && !globalSettings) {
       loadGlobalSettings();
     }
   }, [open, globalSettings, loadGlobalSettings]);
 
-  const selectedCLIOption = enabledCLIs.find(cli => cli.id === selectedCLI);
-  const selectedModelOption = selectedCLIOption?.models.find(model => model.id === selectedModel);
+  const selectedModelOption = CLAUDE_MODELS.find(model => model.id === selectedModel);
 
   // WebSocket connection for project initialization
   const connectToProjectWebSocket = (projectId: string) => {
@@ -334,14 +204,10 @@ export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlo
     
     // Reset to global defaults or fallback
     if (globalSettings) {
-      setSelectedCLI(globalSettings.default_cli || 'claude');
-      setFallbackEnabled(globalSettings.fallback_enabled ?? true);
-      const cliSettings = globalSettings.cli_settings?.[globalSettings.default_cli || 'claude'];
-      setSelectedModel(sanitizeModel(globalSettings.default_cli || 'claude', cliSettings?.model));
+      const cliSettings = globalSettings.cli_settings?.claude;
+      setSelectedModel(sanitizeModel('claude', cliSettings?.model));
     } else {
-      setSelectedCLI('claude');
       setSelectedModel(DEFAULT_MODEL_ID);
-      setFallbackEnabled(true);
     }
     
     // Close modal and navigate to chat with initial prompt
@@ -365,48 +231,35 @@ export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlo
     }
   }, [imageUrl, selectedModelOption]);
 
-  const handleCLIChange = (cliId: string) => {
-    setUseDefaultSettings(false);
-    setSelectedCLI(cliId);
-    // Auto-select first model for the selected CLI
-    const cli = enabledCLIs.find(c => c.id === cliId);
-    if (cli?.models.length) {
-      setSelectedModel(sanitizeModel(cliId, cli.models[0].id));
-    }
-    setShowCLIDropdown(false);
-  };
-
   const handleModelChange = (modelId: string) => {
     setUseDefaultSettings(false);
-    setSelectedModel(sanitizeModel(selectedCLI, modelId));
+    setSelectedModel(sanitizeModel('claude', modelId));
     setShowModelDropdown(false);
   };
 
   async function submit() {
     if (!projectName.trim() || !prompt.trim()) return;
-    
-    // Determine CLI and model based on useDefaultSettings
-    let finalCLI = selectedCLI;
+
+    // Determine model based on useDefaultSettings
     let finalModel = selectedModel;
-    
+
     if (useDefaultSettings && globalSettings) {
-      finalCLI = globalSettings.default_cli || 'claude';
-      const cliSettings = globalSettings.cli_settings?.[finalCLI];
-      finalModel = sanitizeModel(finalCLI, cliSettings?.model || selectedModel || DEFAULT_MODEL_ID);
+      const cliSettings = globalSettings.cli_settings?.claude;
+      finalModel = sanitizeModel('claude', cliSettings?.model || selectedModel || DEFAULT_MODEL_ID);
     }
-    
-    if (!finalCLI || !finalModel) {
-      console.error('Missing CLI or model selection:', { finalCLI, finalModel, useDefaultSettings, globalSettings });
+
+    if (!finalModel) {
+      console.error('Missing model selection:', { finalModel, useDefaultSettings, globalSettings });
       return;
     }
-    
+
     // Check image compatibility before submitting
     if (imageUrl && selectedModelOption && !selectedModelOption.supportsImages) {
       return; // Don't submit if there's an image compatibility error
     }
-    
-    console.log('Creating project with:', { finalCLI, finalModel, useDefaultSettings, globalSettings });
-    
+
+    console.log('Creating project with:', { finalModel, useDefaultSettings, globalSettings });
+
     const name = projectName.trim() || 'New Project';
     const projectUuid = generateUUID();
     
@@ -425,11 +278,11 @@ export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlo
         name,
         description: prompt,
         initialPrompt: prompt,
-        preferredCli: finalCLI,
-        fallbackEnabled,
+        preferredCli: 'claude',
+        fallbackEnabled: false,
         selectedModel: finalModel,
         cli_settings: {
-          [finalCLI]: {
+          claude: {
             model: finalModel
           }
         }
@@ -733,7 +586,7 @@ export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlo
                 </label>
                 <p className="text-xs text-gray-500 mt-1">
                   {globalSettings ? (
-                    <>Use {enabledCLIs.find(cli => cli.id === globalSettings.default_cli)?.name || 'default'} AI with your preferred model. Change this in <button 
+                    <>Use Claude Code with your preferred model. Change this in <button
                       onClick={() => {
                         onClose();
                         onOpenGlobalSettings?.();
@@ -741,7 +594,7 @@ export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlo
                       className="text-gray-900 hover:underline"
                     >Global Settings</button>.</>
                   ) : (
-                    <>Quick start with Claude AI. Customize AI preferences in <button 
+                    <>Quick start with Claude Code. Customize AI preferences in <button
                       onClick={() => {
                         onClose();
                         onOpenGlobalSettings?.();
@@ -753,74 +606,9 @@ export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlo
               </div>
             </div>
 
-            {/* AI Selection Dropdowns */}
+            {/* Model Selection */}
             {!useDefaultSettings && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* CLI Selection Dropdown */}
-                <div className="relative">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    AI Assistant
-                  </label>
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowCLIDropdown(!showCLIDropdown)}
-                      className="w-full p-3 bg-white border border-gray-200 rounded-lg text-left flex items-center justify-between hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-lg">{selectedCLIOption?.icon}</span>
-                        <div>
-                          <div className="font-medium text-gray-900 ">{selectedCLIOption?.name}</div>
-                          <div className="text-xs text-gray-500 ">{selectedCLIOption?.description}</div>
-                        </div>
-                      </div>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={`transition-transform ${showCLIDropdown ? 'rotate-180' : ''}`}>
-                        <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
-
-                    <AnimatePresence>
-                      {showCLIDropdown && (
-                        <MotionDiv
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto"
-                        >
-                          {enabledCLIs.map((cli) => {
-                            const cliStatusInfo = cliStatus?.[cli.id];
-                            const isInstalled = cliStatusInfo?.installed ?? true;
-                            
-                            return (
-                              <button
-                                key={cli.id}
-                                onClick={() => handleCLIChange(cli.id)}
-                                className="w-full p-3 text-left hover:bg-gray-50 flex items-center gap-3 border-b border-gray-100 last:border-b-0"
-                              >
-                                <span className="text-lg">{cli.icon}</span>
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <div className="font-medium text-gray-900 ">{cli.name}</div>
-                                    {isInstalled ? (
-                                      <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">
-                                        ✓
-                                      </span>
-                                    ) : (
-                                      <span className="text-xs bg-yellow-100 text-yellow-600 px-2 py-1 rounded-full">
-                                        !
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="text-xs text-gray-500 ">{cli.description}</div>
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </MotionDiv>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </div>
-
+              <div>
                 {/* Model Selection Dropdown */}
                 <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -848,14 +636,14 @@ export default function CreateProjectModal({ open, onClose, onCreated, onOpenGlo
                     </button>
 
                     <AnimatePresence>
-                      {showModelDropdown && selectedCLIOption && (
+                      {showModelDropdown && (
                         <MotionDiv
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -10 }}
                           className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto"
                         >
-                          {selectedCLIOption.models.map((model) => (
+                          {CLAUDE_MODELS.map((model) => (
                             <button
                               key={model.id}
                               onClick={() => handleModelChange(model.id)}

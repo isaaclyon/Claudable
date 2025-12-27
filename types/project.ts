@@ -1,4 +1,3 @@
-import type { CLIType } from './cli';
 
 export type ProjectStatus =
   | 'idle'
@@ -35,13 +34,7 @@ export interface Project {
     supabase?: ServiceConnection;
     vercel?: ServiceConnection;
   };
-  preferredCli?: CLIType | null;
-  selectedModel?: string | null;
-  fallbackEnabled?: boolean;
 }
 
 export interface ProjectSettings {
-  preferredCli: CLIType;
-  fallbackEnabled: boolean;
-  selectedModel?: string | null;
 }

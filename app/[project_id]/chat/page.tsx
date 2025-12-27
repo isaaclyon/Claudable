@@ -14,11 +14,12 @@ import { ChatErrorBoundary } from '@/components/ErrorBoundary';
 import { useUserRequests } from '@/hooks/useUserRequests';
 import { useGlobalSettings } from '@/contexts/GlobalSettingsContext';
 import { getDefaultModelForCli, getModelDisplayName } from '@/lib/constants/cliModels';
+import type { RealtimeMessage } from '@/types/realtime';
 import {
-  ACTIVE_CLI_BRAND_COLORS,
-  ACTIVE_CLI_IDS,
+  ACTIVE_CLI_BRAND_COLOR,
+  ACTIVE_CLI_ID,
   ACTIVE_CLI_MODEL_OPTIONS,
-  ACTIVE_CLI_NAME_MAP,
+  ACTIVE_CLI_NAME,
   DEFAULT_ACTIVE_CLI,
   buildActiveModelOptions,
   normalizeModelForCli,
@@ -31,11 +32,9 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
-const assistantBrandColors = ACTIVE_CLI_BRAND_COLORS;
-
-const CLI_LABELS = ACTIVE_CLI_NAME_MAP;
-
-const CLI_ORDER = ACTIVE_CLI_IDS;
+// Claude-only constants (app now only supports Claude)
+const assistantBrandColor = ACTIVE_CLI_BRAND_COLOR;
+const cliName = ACTIVE_CLI_NAME;
 
 const sanitizeCli = (cli?: string | null) => sanitizeActiveCli(cli, DEFAULT_ACTIVE_CLI);
 
@@ -221,7 +220,7 @@ export default function ChatPage() {
 
   // Ref to store add/remove message handlers from ChatLog
   const messageHandlersRef = useRef<{
-    add: (message: any) => void;
+    add: (message: RealtimeMessage) => void;
     remove: (messageId: string) => void;
   } | null>(null);
 
@@ -230,12 +229,12 @@ export default function ChatPage() {
 
   // Stable message handlers to prevent reassignment issues
   const stableMessageHandlers = useRef<{
-    add: (message: any) => void;
+    add: (message: RealtimeMessage) => void;
     remove: (messageId: string) => void;
   } | null>(null);
 
   // Track active optimistic messages by requestId
-  const optimisticMessagesRef = useRef<Map<string, any>>(new Map());
+  const optimisticMessagesRef = useRef<Map<string, RealtimeMessage>>(new Map());
   const [mode, setMode] = useState<'act' | 'chat'>('act');
   const [isRunning, setIsRunning] = useState(false);
   const [isSseFallbackActive, setIsSseFallbackActive] = useState(false);
@@ -280,17 +279,9 @@ export default function ChatPage() {
   const lineNumberRef = useRef<HTMLDivElement>(null);
   const editedContentRef = useRef<string>('');
   const [isFileUpdating, setIsFileUpdating] = useState(false);
-  const activeBrandColor =
-    assistantBrandColors[preferredCli] || assistantBrandColors[DEFAULT_ACTIVE_CLI];
+  // Since the app only supports Claude now, use the constant brand color
+  const activeBrandColor = assistantBrandColor;
   const modelOptions = useMemo(() => buildModelOptions(cliStatuses), [cliStatuses]);
-  const cliOptions = useMemo(
-    () => CLI_ORDER.map(cli => ({
-      id: cli,
-      name: CLI_LABELS[cli] || cli,
-      available: Boolean(cliStatuses[cli]?.available && cliStatuses[cli]?.configured)
-    })),
-    [cliStatuses]
-  );
 
   const updatePreferredCli = useCallback((cli: string) => {
     const sanitized = sanitizeCli(cli);
@@ -418,15 +409,14 @@ export default function ChatPage() {
   }, [searchParams, sendInitialPrompt, preferredCli]);
 
 const loadCliStatuses = useCallback(() => {
+  // Since the app only supports Claude now, only load Claude status
   const snapshot: Record<string, CliStatusSnapshot> = {};
-  ACTIVE_CLI_IDS.forEach(id => {
-    const models = ACTIVE_CLI_MODEL_OPTIONS[id]?.map(model => model.id) ?? [];
-    snapshot[id] = {
-      available: true,
-      configured: true,
-      models,
-    };
-  });
+  const models = ACTIVE_CLI_MODEL_OPTIONS.map((model) => model.id);
+  snapshot[ACTIVE_CLI_ID] = {
+    available: true,
+    configured: true,
+    models,
+  };
   setCliStatuses(snapshot);
 }, []);
 
@@ -495,7 +485,8 @@ const persistProjectPreferences = useCallback(
 
         await persistProjectPreferences(preferenceChanges);
 
-        const cliLabel = CLI_LABELS[targetCli] || targetCli;
+        // Since the app only supports Claude now, use the constant CLI name
+        const cliLabel = cliName;
         const modelLabel = getModelDisplayName(targetCli, sanitizedModelId);
         try {
           await fetch(`${API_BASE}/api/chat/${projectId}/messages`, {
@@ -597,9 +588,9 @@ const persistProjectPreferences = useCallback(
       }
 
       if (response.ok) {
-        const connections = await response.json();
-        const githubConnection = connections.find((conn: any) => conn.provider === 'github');
-        const vercelConnection = connections.find((conn: any) => conn.provider === 'vercel');
+        const connections = await response.json() as Array<{ provider: string; service_data?: Record<string, unknown> }>;
+        const githubConnection = connections.find((conn) => conn.provider === 'github');
+        const vercelConnection = connections.find((conn) => conn.provider === 'vercel');
         
         // Check actual project connections (not just token existence)
         setGithubConnected(!!githubConnection);
@@ -1587,7 +1578,7 @@ const persistProjectPreferences = useCallback(
 
   // Stable message handlers with useCallback to prevent reassignment
   const createStableMessageHandlers = useCallback(() => {
-    const addMessage = (message: any) => {
+    const addMessage = (message: RealtimeMessage) => {
       console.log('🔄 [StableHandler] Adding message via stable handler:', {
         messageId: message.id,
         role: message.role,
@@ -1678,7 +1669,13 @@ const persistProjectPreferences = useCallback(
     });
   };
 
-  async function runAct(messageOverride?: string, externalImages?: any[]) {
+  async function runAct(
+    messageOverride?: string,
+    externalImages?: Array<
+      | { id: string; filename: string; path: string; url: string; assetUrl?: string; publicUrl?: string }
+      | { name: string; url: string; base64?: string; path?: string }
+    >
+  ) {
     let finalMessage = messageOverride || prompt;
     const imagesToUse = externalImages || uploadedImages;
 
@@ -1773,30 +1770,35 @@ const persistProjectPreferences = useCallback(
 
       for (let i = 0; i < imagesToUse.length; i += 1) {
         const image = imagesToUse[i];
-        console.log(`🖼️ Processing image ${i}:`, {
-          id: image.id,
-          filename: image.filename,
-          hasPath: !!image.path,
-          hasPublicUrl: !!image.publicUrl,
-          hasAssetUrl: !!image.assetUrl
-        });
-        if (image?.path) {
-          const name = image.filename || image.name || `Image ${i + 1}`;
-          const candidateUrl = typeof image.assetUrl === 'string' ? image.assetUrl : undefined;
-          const candidatePublicUrl = typeof image.publicUrl === 'string' ? image.publicUrl : undefined;
-          const processedImage = {
-            name,
-            path: image.path,
-            url: candidateUrl && candidateUrl.startsWith('/') ? candidateUrl : undefined,
-            public_url: candidatePublicUrl,
-            publicUrl: candidatePublicUrl,
-          };
-          console.log(`🖼️ Created processed image ${i}:`, processedImage);
-          processedImages.push(processedImage);
-          continue;
+
+        // Check if it's an uploaded image (has id and filename)
+        if ('id' in image && 'filename' in image) {
+          console.log(`🖼️ Processing uploaded image ${i}:`, {
+            id: image.id,
+            filename: image.filename,
+            hasPath: !!image.path,
+            hasPublicUrl: !!image.publicUrl,
+            hasAssetUrl: !!image.assetUrl
+          });
+
+          if (image.path) {
+            const candidateUrl = typeof image.assetUrl === 'string' ? image.assetUrl : undefined;
+            const candidatePublicUrl = typeof image.publicUrl === 'string' ? image.publicUrl : undefined;
+            const processedImage = {
+              name: image.filename,
+              path: image.path,
+              url: candidateUrl && candidateUrl.startsWith('/') ? candidateUrl : undefined,
+              public_url: candidatePublicUrl,
+              publicUrl: candidatePublicUrl,
+            };
+            console.log(`🖼️ Created processed image ${i}:`, processedImage);
+            processedImages.push(processedImage);
+            continue;
+          }
         }
 
-        if (image?.base64) {
+        // Check if it's a base64 image (has name and base64)
+        if ('base64' in image && image.base64) {
           try {
             const uploaded = await uploadImageFromBase64({ base64: image.base64, name: image.name });
             processedImages.push(uploaded);
@@ -1908,9 +1910,9 @@ const persistProjectPreferences = useCallback(
           alert(`Failed to send message: ${r.status} ${r.statusText}\n${errorText}`);
           return;
         }
-      } catch (fetchError: any) {
+      } catch (fetchError: unknown) {
         clearTimeout(timeoutId);
-        if (fetchError.name === 'AbortError') {
+        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
           if (tempUserMessageId) {
             console.log('🔄 [Optimistic] Removing optimistic user message due to timeout via stable handler:', tempUserMessageId);
             if (stableMessageHandlers.current) {
@@ -1974,7 +1976,7 @@ const persistProjectPreferences = useCallback(
         setUploadedImages([]);
       }
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Act execution error:', error);
 
       if (tempUserMessageId) {
@@ -1986,7 +1988,7 @@ const persistProjectPreferences = useCallback(
         }
       }
 
-      const errorMessage = error?.message || String(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
       alert(`Failed to send message: ${errorMessage}\n\nPlease try again. If the problem persists, check the console for details.`);
     } finally {
       setIsRunning(false);
@@ -2316,16 +2318,13 @@ const persistProjectPreferences = useCallback(
                 mode={mode}
                 onModeChange={setMode}
                 projectId={projectId}
-                preferredCli={preferredCli}
                 selectedModel={selectedModel}
                 thinkingMode={thinkingMode}
                 onThinkingModeChange={setThinkingMode}
                 modelOptions={modelOptions}
                 onModelChange={handleModelChange}
                 modelChangeDisabled={isUpdatingModel}
-                cliOptions={cliOptions}
-                onCliChange={handleCliChange}
-                cliChangeDisabled={isUpdatingModel}
+                isRunning={isRunning}
               />
             </div>
           </div>

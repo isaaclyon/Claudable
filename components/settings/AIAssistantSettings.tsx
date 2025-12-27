@@ -1,63 +1,44 @@
+'use client';
+
 /**
  * AI Assistant Settings Component
- * Display current AI CLI and model (read-only)
+ * Display current Claude model selection (read-only)
  */
 import React from 'react';
-import { useCLI } from '@/hooks/useCLI';
+import { useClaudeModelPreference } from '@/hooks/useClaudeModelPreference';
 
 interface AIAssistantSettingsProps {
   projectId: string;
 }
 
 export function AIAssistantSettings({ projectId }: AIAssistantSettingsProps) {
-  const { cliOptions, preference } = useCLI({ projectId });
-
-  const selectedCLIOption = cliOptions.find(opt => opt.id === preference?.preferredCli);
-  
-  // Get the actual model name from preference data
-  const getModelDisplayName = () => {
-    if (!preference?.selectedModel) return 'Default Model';
-    
-    // Find the model name from the CLI options
-    const currentCLI = selectedCLIOption;
-    if (currentCLI?.models) {
-      const model = currentCLI.models.find(m => m.id === preference.selectedModel);
-      return model?.name || preference.selectedModel;
-    }
-    
-    return preference.selectedModel;
-  };
-  
-  const modelDisplayName = getModelDisplayName();
+  const { preference, isLoading } = useClaudeModelPreference({ projectId });
 
   return (
     <div className="p-6 space-y-6">
       <div>
         <h3 className="text-lg font-medium text-gray-900 mb-4">
-          Current AI Assistant
+          Claude Code Agent
         </h3>
-        
+
         <div className="space-y-4">
-          {/* Current CLI */}
-          <div className="p-4 bg-gray-50 rounded-lg">
+          {/* AI Agent Info */}
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-1">
-                  CLI Agent
+                <h4 className="text-sm font-medium text-gray-700 mb-2">
+                  Code Generation Agent
                 </h4>
+                <p className="text-sm text-gray-600 mb-3">
+                  Claudable uses Claude Code as the primary AI agent for generating and managing your projects.
+                </p>
                 <div className="flex items-center gap-2">
-                  <span className="text-lg font-semibold text-gray-900 ">
-                    {selectedCLIOption?.name || preference?.preferredCli || 'Not configured'}
+                  <span className="text-lg font-semibold text-gray-900">
+                    Claude Code
                   </span>
-                  {selectedCLIOption?.configured ? (
-                    <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded">
-                      Configured
-                    </span>
-                  ) : (
-                    <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded">
-                      Not Configured
-                    </span>
-                  )}
+                  <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                    Configured
+                  </span>
                 </div>
               </div>
             </div>
@@ -65,19 +46,29 @@ export function AIAssistantSettings({ projectId }: AIAssistantSettingsProps) {
 
           {/* Current Model */}
           <div className="p-4 bg-gray-50 rounded-lg">
-            <h4 className="text-sm font-medium text-gray-700 mb-1">
+            <h4 className="text-sm font-medium text-gray-700 mb-2">
               Model
             </h4>
-            <span className="text-lg font-semibold text-gray-900 ">
-              {modelDisplayName}
-            </span>
+            {isLoading ? (
+              <div className="animate-pulse">
+                <div className="h-6 bg-gray-300 rounded w-32"></div>
+              </div>
+            ) : (
+              <>
+                <span className="text-lg font-semibold text-gray-900">
+                  {preference?.displayName || 'Unknown'}
+                </span>
+                <p className="text-xs text-gray-500 mt-2">
+                  ID: {preference?.selectedModelId}
+                </p>
+              </>
+            )}
           </div>
 
-
           {/* Note */}
-          <div className="text-center">
-            <p className="text-sm text-gray-500 ">
-              To modify these settings, use Global Settings
+          <div className="text-center pt-2">
+            <p className="text-sm text-gray-500">
+              To change the model, use Global Settings
             </p>
           </div>
         </div>

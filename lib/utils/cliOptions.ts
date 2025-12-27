@@ -1,72 +1,46 @@
 import { CLI_OPTIONS, type CLIOption } from '@/types/cli';
 import { getModelDefinitionsForCli, normalizeModelId } from '@/lib/constants/cliModels';
 
-export const ACTIVE_CLI_IDS = ['claude', 'codex', 'cursor', 'qwen', 'glm'] as const;
+// Claude Code is the only supported CLI
+export const ACTIVE_CLI_ID = 'claude' as const;
 
-export type ActiveCliId = (typeof ACTIVE_CLI_IDS)[number];
+export type ActiveCliId = typeof ACTIVE_CLI_ID;
 
-const ACTIVE_CLI_ID_SET = new Set<ActiveCliId>(ACTIVE_CLI_IDS);
+export const DEFAULT_ACTIVE_CLI: ActiveCliId = ACTIVE_CLI_ID;
 
-const isActiveCliId = (value: string): value is ActiveCliId => {
-  return ACTIVE_CLI_ID_SET.has(value as ActiveCliId);
-};
+type ClaudeCliOption = CLIOption & { id: 'claude' };
 
-export const DEFAULT_ACTIVE_CLI: ActiveCliId = 'claude';
+const claudeOption = CLI_OPTIONS.find((option): option is ClaudeCliOption => option.id === 'claude');
 
-type ActiveCliOption = CLIOption & { id: ActiveCliId };
+if (!claudeOption) {
+  throw new Error('Claude CLI configuration not found in CLI_OPTIONS');
+}
 
-export const ACTIVE_CLI_OPTIONS: ActiveCliOption[] = CLI_OPTIONS.filter((option): option is ActiveCliOption =>
-  isActiveCliId(option.id)
-);
+export const ACTIVE_CLI_OPTION = claudeOption;
 
-export const ACTIVE_CLI_OPTIONS_MAP = ACTIVE_CLI_OPTIONS.reduce<Record<ActiveCliId, ActiveCliOption>>((acc, option) => {
-  acc[option.id] = option;
-  return acc;
-}, {} as Record<ActiveCliId, ActiveCliOption>);
+export const ACTIVE_CLI_BRAND_COLOR = ACTIVE_CLI_OPTION.brandColor ?? '#DE7356';
 
-export const ACTIVE_CLI_BRAND_COLORS = ACTIVE_CLI_OPTIONS.reduce<Record<ActiveCliId, string>>((acc, option) => {
-  acc[option.id] = option.brandColor ?? '#DE7356';
-  return acc;
-}, {} as Record<ActiveCliId, string>);
+export const ACTIVE_CLI_NAME = ACTIVE_CLI_OPTION.name;
 
-export const ACTIVE_CLI_NAME_MAP = ACTIVE_CLI_OPTIONS.reduce<Record<ActiveCliId, string>>((acc, option) => {
-  acc[option.id] = option.name;
-  return acc;
-}, {} as Record<ActiveCliId, string>);
+export const ACTIVE_CLI_ICON = ACTIVE_CLI_OPTION.icon;
 
-export const ACTIVE_CLI_ICON_MAP = ACTIVE_CLI_OPTIONS.reduce<Record<ActiveCliId, string>>((acc, option) => {
-  if (option.icon) {
-    acc[option.id] = option.icon;
-  }
-  return acc;
-}, {} as Record<ActiveCliId, string>);
-
-export const ACTIVE_CLI_MODEL_OPTIONS = ACTIVE_CLI_OPTIONS.reduce<Record<ActiveCliId, { id: string; name: string }[]>>(
-  (acc, option) => {
-    acc[option.id] = getModelDefinitionsForCli(option.id).map(({ id, name }) => ({
-      id: normalizeModelId(option.id, id),
-      name,
-    }));
-    return acc;
-  },
-  {} as Record<ActiveCliId, { id: string; name: string }[]>
-);
+export const ACTIVE_CLI_MODEL_OPTIONS = getModelDefinitionsForCli('claude').map(({ id, name }) => ({
+  id: normalizeModelId('claude', id),
+  name,
+}));
 
 export const sanitizeActiveCli = (cli: string | null | undefined, fallback: ActiveCliId = DEFAULT_ACTIVE_CLI): ActiveCliId => {
-  if (!cli) {
-    return fallback;
-  }
-  const normalized = cli.toLowerCase();
-  return isActiveCliId(normalized) ? (normalized as ActiveCliId) : fallback;
+  // Always return 'claude' as it's the only supported CLI
+  return fallback;
 };
 
 export const normalizeModelForCli = (
-  cli: string | null | undefined,
+  _cli: string | null | undefined,
   model?: string | null,
-  fallback: ActiveCliId = DEFAULT_ACTIVE_CLI
+  _fallback: ActiveCliId = DEFAULT_ACTIVE_CLI
 ): string => {
-  const sanitized = sanitizeActiveCli(cli, fallback);
-  return normalizeModelId(sanitized, model);
+  // Always use Claude's model normalization
+  return normalizeModelId('claude', model);
 };
 
 export interface ModelAvailabilityEntry {
@@ -78,30 +52,27 @@ export interface ModelAvailabilityEntry {
 export interface ActiveModelOption {
   id: string;
   name: string;
-  cli: ActiveCliId;
+  cli: 'claude';
   cliName: string;
   available: boolean;
 }
 
 export const buildActiveModelOptions = (statuses: Record<string, ModelAvailabilityEntry>): ActiveModelOption[] => {
   const options: ActiveModelOption[] = [];
+  const status = statuses?.['claude'];
+  const availableModels = new Set((status?.models ?? []).map(modelId => normalizeModelId('claude', modelId)));
+  const baseAvailability = Boolean(status?.available ?? status?.configured ?? true);
 
-  ACTIVE_CLI_OPTIONS.forEach(({ id, name }) => {
-    const status = statuses?.[id];
-    const availableModels = new Set((status?.models ?? []).map(modelId => normalizeModelId(id, modelId)));
-    const baseAvailability = Boolean(status?.available ?? status?.configured ?? true);
+  getModelDefinitionsForCli('claude').forEach(definition => {
+    const normalizedId = normalizeModelId('claude', definition.id);
+    const isAvailable = baseAvailability && (availableModels.size === 0 || availableModels.has(normalizedId));
 
-    getModelDefinitionsForCli(id).forEach(definition => {
-      const normalizedId = normalizeModelId(id, definition.id);
-      const isAvailable = baseAvailability && (availableModels.size === 0 || availableModels.has(normalizedId));
-
-      options.push({
-        id: normalizedId,
-        name: definition.name,
-        cli: id,
-        cliName: name,
-        available: isAvailable,
-      });
+    options.push({
+      id: normalizedId,
+      name: definition.name,
+      cli: 'claude',
+      cliName: ACTIVE_CLI_NAME,
+      available: isAvailable,
     });
   });
 

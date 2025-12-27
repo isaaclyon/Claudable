@@ -8,7 +8,6 @@ import { NextRequest } from 'next/server';
 import { getAllProjects, createProject } from '@/lib/services/project';
 import type { CreateProjectInput } from '@/types/backend';
 import { serializeProjects, serializeProject } from '@/lib/serializers/project';
-import { getDefaultModelForCli, normalizeModelId } from '@/lib/constants/cliModels';
 import { createSuccessResponse, createErrorResponse, handleApiError } from '@/lib/utils/api-response';
 
 /**
@@ -31,15 +30,11 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const preferredCli = String(body.preferredCli || body.preferred_cli || 'claude').toLowerCase();
-    const requestedModel = body.selectedModel || body.selected_model;
 
     const input: CreateProjectInput = {
       project_id: body.project_id,
       name: body.name,
       initialPrompt: body.initialPrompt || body.initial_prompt,
-      preferredCli,
-      selectedModel: normalizeModelId(preferredCli, requestedModel ?? getDefaultModelForCli(preferredCli)),
       description: body.description,
     };
 

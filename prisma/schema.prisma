@@ -33,12 +33,6 @@ model Project {
 
   // AI Session Management
   activeClaudeSessionId String? @map("active_claude_session_id")
-  activeCursorSessionId String? @map("active_cursor_session_id")
-
-  // CLI Preferences
-  preferredCli  String? @map("preferred_cli") // claude, cursor, codex, gemini, qwen
-  selectedModel String? @map("selected_model") // claude model id (claude-opus-4-1-20250805 | claude-sonnet-4-5-20250929 | claude-haiku-4-5-20251001)
-  fallbackEnabled Boolean @default(false) @map("fallback_enabled")
 
   // Settings (JSON)
   settings    String? // JSON string for additional settings
@@ -242,7 +236,6 @@ model UserRequest {
 
   // Request info
   instruction    String
-  cliPreference  String?  @map("cli_preference")
   status         String   @default("pending") // pending, processing, completed, failed
   errorMessage   String?  @map("error_message")
 

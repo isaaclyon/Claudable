@@ -20,10 +20,6 @@ export interface Project {
   initialPrompt?: string;
   templateType?: TemplateType;
   activeClaudeSessionId?: string;
-  activeCursorSessionId?: string;
-  preferredCli?: string;
-  selectedModel?: string;
-  fallbackEnabled: boolean;
   settings?: string; // JSON string
   createdAt: Date;
   updatedAt: Date;
@@ -34,8 +30,6 @@ export interface CreateProjectInput {
   project_id: string;
   name: string;
   initialPrompt: string;
-  preferredCli?: string;
-  selectedModel?: string;
   description?: string;
 }
 
@@ -48,11 +42,8 @@ export interface UpdateProjectInput {
    */
   previewUrl?: string | null;
   previewPort?: number | null;
-  preferredCli?: string;
-  selectedModel?: string;
   settings?: string;
   activeClaudeSessionId?: string;
-  activeCursorSessionId?: string;
   repoPath?: string | null;
 }
 

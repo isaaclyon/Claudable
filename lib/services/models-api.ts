@@ -22,21 +22,21 @@ interface ModelsApiResponse {
 /** Fallback models when API is unavailable */
 const FALLBACK_MODELS: AnthropicModelInfo[] = [
   {
-    id: 'claude-opus-4-5-20250929',
+    id: 'claude-opus-4-5-20251101',
     display_name: 'Claude Opus 4.5',
-    created_at: '2025-09-29T00:00:00Z',
+    created_at: '2025-11-01T00:00:00Z',
     type: 'model',
   },
   {
-    id: 'claude-sonnet-4-5-20250929',
+    id: 'claude-sonnet-4-5-20241022',
     display_name: 'Claude Sonnet 4.5',
-    created_at: '2025-09-29T00:00:00Z',
+    created_at: '2024-10-22T00:00:00Z',
     type: 'model',
   },
   {
-    id: 'claude-haiku-4-5-20251001',
-    display_name: 'Claude Haiku 4.5',
-    created_at: '2025-10-01T00:00:00Z',
+    id: 'claude-3-5-haiku-20241022',
+    display_name: 'Claude 3.5 Haiku',
+    created_at: '2024-10-22T00:00:00Z',
     type: 'model',
   },
 ];

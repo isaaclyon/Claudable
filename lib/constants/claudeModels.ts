@@ -138,7 +138,7 @@ export function getDefaultClaudeModel(definitions?: ClaudeModelDefinition[]): st
   if (opus) return opus.id;
 
   // Fallback to first available model
-  return defs[0]?.id ?? 'claude-opus-4-5-20250929';
+  return defs[0]?.id ?? 'claude-opus-4-5-20251101';
 }
 
 /** @deprecated Use getDefaultClaudeModel() instead */

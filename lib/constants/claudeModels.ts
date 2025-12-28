@@ -1,117 +1,196 @@
-export type ClaudeModelId =
-  | 'claude-opus-4-1-20250805'
-  | 'claude-sonnet-4-5-20250929'
-  | 'claude-haiku-4-5-20251001';
+import {
+  getAnthropicModels,
+  getCachedModelsSync,
+  getFallbackModels,
+  type AnthropicModelInfo,
+} from '@/lib/services/models-api';
 
 export interface ClaudeModelDefinition {
-  id: ClaudeModelId;
+  id: string;
   /** Human friendly display name */
   name: string;
   /** Optional longer description */
   description?: string;
-  /** Whether the model can accept images */
+  /** Whether the model can accept images (all current Claude models support this) */
   supportsImages?: boolean;
   /** Acceptable alias strings that should resolve to this model id */
   aliases: string[];
 }
 
-export const CLAUDE_MODEL_DEFINITIONS: ClaudeModelDefinition[] = [
-  {
-    id: 'claude-opus-4-1-20250805',
-    name: 'Claude Opus 4.1',
-    description: 'Newest Opus release with the strongest reasoning skills',
-    supportsImages: true,
-    aliases: [
-      'claude-opus-4-1-20250805',
-      'claude-opus-4-1',
-      'claude-opus-4.1',
-      'claude-opus-4',
-      'claude-opus',
-      'opus-4-1-20250805',
-      'opus-4-1',
-      'opus-4.1',
-      'opus-4',
-      'opus',
-      'claude-3-opus',
-      'claude-3-opus-20240229',
-      'claude-3-opus-latest',
-    ],
-  },
-  {
-    id: 'claude-sonnet-4-5-20250929',
-    name: 'Claude Sonnet 4.5',
-    description: 'Balanced Sonnet tier with a large context window',
-    supportsImages: true,
-    aliases: [
-      'claude-sonnet-4-5-20250929',
-      'claude-sonnet-4-5',
-      'claude-sonnet-4.5',
-      'claude-sonnet-4',
-      'claude-sonnet',
-      'sonnet-4-5-20250929',
-      'sonnet-4-5',
-      'sonnet-4.5',
-      'sonnet-4',
-      'sonnet',
-      'claude-3.5-sonnet',
-      'claude-3-5-sonnet',
-      'claude-3-5-sonnet-20241022',
-      'claude-3-5-sonnet-latest',
-    ],
-  },
-  {
-    id: 'claude-haiku-4-5-20251001',
-    name: 'Claude Haiku 4.5',
-    description: 'Fastest Haiku tier for lightweight tasks',
-    supportsImages: true,
-    aliases: [
-      'claude-haiku-4-5-20251001',
-      'claude-haiku-4-5',
-      'claude-haiku-4.5',
-      'claude-haiku-4',
-      'claude-haiku',
-      'haiku-4-5-20251001',
-      'haiku-4-5',
-      'haiku-4.5',
-      'haiku-4',
-      'haiku',
-      'claude-3-haiku',
-      'claude-3-haiku-20240307',
-      'claude-3-haiku-latest',
-      'claude-haiku-3.5',
-    ],
-  },
-];
+/**
+ * Generate aliases from a display name
+ * "Claude Opus 4.5" → ['opus', 'opus-4', 'opus-4.5', 'claude-opus', 'claude-opus-4', 'claude-opus-4.5']
+ */
+function generateAliasesFromDisplayName(displayName: string, id: string): string[] {
+  const aliases: string[] = [id];
+  const lower = displayName.toLowerCase();
 
-export const CLAUDE_DEFAULT_MODEL: ClaudeModelId = 'claude-sonnet-4-5-20250929';
+  // Match patterns like "Claude Opus 4.5" or "Claude 3.5 Sonnet"
+  const pattern1 = lower.match(/claude\s+(\w+)\s+([\d.]+)/); // "Claude Opus 4.5"
+  const pattern2 = lower.match(/claude\s+([\d.]+)\s+(\w+)/); // "Claude 3.5 Sonnet"
 
-const CLAUDE_MODEL_ALIAS_MAP: Record<string, ClaudeModelId> = CLAUDE_MODEL_DEFINITIONS.reduce(
-  (map, definition) => {
-    definition.aliases.forEach(alias => {
-      const key = alias.trim().toLowerCase().replace(/[\s_]+/g, '-');
-      map[key] = definition.id;
-    });
-    map[definition.id.toLowerCase()] = definition.id;
-    return map;
-  },
-  {} as Record<string, ClaudeModelId>
-);
+  let family: string | null = null;
+  let version: string | null = null;
 
-export function normalizeClaudeModelId(model?: string | null): ClaudeModelId {
-  if (!model) return CLAUDE_DEFAULT_MODEL;
-  const normalized = model.trim().toLowerCase().replace(/[\s_]+/g, '-');
-  return CLAUDE_MODEL_ALIAS_MAP[normalized] ?? CLAUDE_DEFAULT_MODEL;
+  if (pattern1) {
+    [, family, version] = pattern1;
+  } else if (pattern2) {
+    [, version, family] = pattern2;
+  }
+
+  if (family && version) {
+    const major = version.split('.')[0];
+    const versionNoDots = version.replace('.', '-');
+
+    // Family-based aliases
+    aliases.push(family);
+    aliases.push(`${family}-${major}`);
+    aliases.push(`${family}-${version}`);
+    aliases.push(`${family}-${versionNoDots}`);
+
+    // Claude-prefixed aliases
+    aliases.push(`claude-${family}`);
+    aliases.push(`claude-${family}-${major}`);
+    aliases.push(`claude-${family}-${version}`);
+    aliases.push(`claude-${family}-${versionNoDots}`);
+
+    // Legacy claude-3 style aliases for backward compatibility
+    aliases.push(`claude-3-${family}`);
+    aliases.push(`claude-3-${family}-latest`);
+  }
+
+  // Add ID variations (replace date suffix patterns)
+  const idWithoutDate = id.replace(/-\d{8}$/, '');
+  if (idWithoutDate !== id) {
+    aliases.push(idWithoutDate);
+  }
+
+  return [...new Set(aliases)]; // Remove duplicates
 }
 
+/**
+ * Convert API model info to our definition format
+ */
+function apiModelToDefinition(model: AnthropicModelInfo): ClaudeModelDefinition {
+  return {
+    id: model.id,
+    name: model.display_name,
+    supportsImages: true, // All current Claude models support images
+    aliases: generateAliasesFromDisplayName(model.display_name, model.id),
+  };
+}
+
+/**
+ * Get model definitions from cache (sync) or fallback
+ * Use getClaudeModelDefinitionsAsync() for guaranteed fresh data
+ */
+function getModelDefinitionsSync(): ClaudeModelDefinition[] {
+  const cached = getCachedModelsSync();
+  const models = cached ?? getFallbackModels();
+  return models.map(apiModelToDefinition);
+}
+
+/**
+ * Get model definitions asynchronously (fetches from API if needed)
+ */
+export async function getClaudeModelDefinitionsAsync(): Promise<ClaudeModelDefinition[]> {
+  const models = await getAnthropicModels();
+  return models.map(apiModelToDefinition);
+}
+
+/**
+ * Synchronous access to model definitions
+ * Uses cached API data or fallback; triggers background refresh if stale
+ * @deprecated Prefer getClaudeModelDefinitionsAsync() for guaranteed fresh data
+ */
+export const CLAUDE_MODEL_DEFINITIONS: ClaudeModelDefinition[] = getModelDefinitionsSync();
+
+/**
+ * Build alias map from model definitions
+ */
+function buildAliasMap(definitions: ClaudeModelDefinition[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const def of definitions) {
+    for (const alias of def.aliases) {
+      const key = alias.trim().toLowerCase().replace(/[\s_]+/g, '-');
+      map[key] = def.id;
+    }
+    map[def.id.toLowerCase()] = def.id;
+  }
+  return map;
+}
+
+/**
+ * Get the default Claude model
+ * Uses env var ANTHROPIC_DEFAULT_MODEL if set, otherwise first Opus model
+ */
+export function getDefaultClaudeModel(definitions?: ClaudeModelDefinition[]): string {
+  const defs = definitions ?? getModelDefinitionsSync();
+
+  // Check for env override
+  const envDefault = process.env.ANTHROPIC_DEFAULT_MODEL;
+  if (envDefault && defs.some(m => m.id === envDefault)) {
+    return envDefault;
+  }
+
+  // Default to first Opus model (API returns newest first)
+  const opus = defs.find(m => m.name.toLowerCase().includes('opus'));
+  if (opus) return opus.id;
+
+  // Fallback to first available model
+  return defs[0]?.id ?? 'claude-opus-4-5-20250929';
+}
+
+/** @deprecated Use getDefaultClaudeModel() instead */
+export const CLAUDE_DEFAULT_MODEL: string = getDefaultClaudeModel();
+
+/**
+ * Normalize a model string to a valid Claude model ID
+ */
+export function normalizeClaudeModelId(model?: string | null): string {
+  const definitions = getModelDefinitionsSync();
+  const defaultModel = getDefaultClaudeModel(definitions);
+
+  if (!model) return defaultModel;
+
+  const aliasMap = buildAliasMap(definitions);
+  const normalized = model.trim().toLowerCase().replace(/[\s_]+/g, '-');
+
+  return aliasMap[normalized] ?? defaultModel;
+}
+
+/**
+ * Normalize a model string asynchronously (uses fresh API data)
+ */
+export async function normalizeClaudeModelIdAsync(model?: string | null): Promise<string> {
+  const definitions = await getClaudeModelDefinitionsAsync();
+  const defaultModel = getDefaultClaudeModel(definitions);
+
+  if (!model) return defaultModel;
+
+  const aliasMap = buildAliasMap(definitions);
+  const normalized = model.trim().toLowerCase().replace(/[\s_]+/g, '-');
+
+  return aliasMap[normalized] ?? defaultModel;
+}
+
+/**
+ * Get a model definition by ID or alias
+ */
 export function getClaudeModelDefinition(id: string): ClaudeModelDefinition | undefined {
+  const definitions = getModelDefinitionsSync();
   return (
-    CLAUDE_MODEL_DEFINITIONS.find(def => def.id === id) ??
-    CLAUDE_MODEL_DEFINITIONS.find(def =>
-      def.aliases.some(alias => alias.toLowerCase() === id.toLowerCase())
-    )
+    definitions.find(def => def.id === id) ??
+    definitions.find(def => def.aliases.some(alias => alias.toLowerCase() === id.toLowerCase()))
   );
 }
 
+/**
+ * Get the display name for a model ID
+ */
 export function getClaudeModelDisplayName(id: string): string {
   return getClaudeModelDefinition(id)?.name ?? id;
 }
+
+// Re-export for convenience
+export { invalidateModelsCache } from '@/lib/services/models-api';

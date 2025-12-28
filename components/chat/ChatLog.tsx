@@ -3005,6 +3005,11 @@ const ToolResultMessage = ({
                         isExpanded={toolExpanded}
                         onToggle={onToggleTool}
                       />
+                    ) : message.messageType === 'info' || (message.role === 'system' && message.messageType !== 'tool_result') ? (
+                      // System info message - grey, italic, slightly smaller
+                      <div className="text-[0.8125rem] text-gray-500 italic leading-relaxed">
+                        {renderContentWithThinking(shortenPath(messageText))}
+                      </div>
                     ) : (
                       // Regular agent message - plain text
                       <div className="text-sm text-gray-900 leading-relaxed">
